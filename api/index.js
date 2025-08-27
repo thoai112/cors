@@ -2,13 +2,10 @@ import express from 'express';
 import * as http from 'node:http';
 import * as https from 'node:https';
 import { URL } from 'url';
-import cors from "cors";
 
 const app = express();
 app.use(express.raw({ type: '*/*' })); // Đảm bảo req.body là Buffer
-app.use(cors());
-// Cho phép preflight (OPTIONS)
-app.options("*", cors());
+
 
 // Agent SSL (nếu backend có cert không chuẩn → bỏ check SSL)
 const httpsAgent = new https.Agent({
