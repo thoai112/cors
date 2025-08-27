@@ -1,60 +1,63 @@
 import express from 'express';
-import * as http from 'node:http';
-import * as https from 'node:https';
-import { URL } from 'url';
+import * as http from "node:http";
+import * as https from "node:https";
 
 const app = express();
-app.use(express.raw({ type: '*/*' })); // Đảm bảo req.body là Buffer
-
-
-// Agent SSL (nếu backend có cert không chuẩn → bỏ check SSL)
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: false
-});
-
-
+app.use(express.raw({ type: '*/*' })); // ensure body is a buffer
 app.all('/', async (req, res) => {
-    try {
-    const targetUrl = req.query.url;
-    if (!targetUrl) {
-      return res.status(400).json({ error: "Thiếu ?url=" });
+    const targetParams = parseTargetParameters(req);
+    if (!targetParams.url) {
+        res.status(400).send("query parameter 'url' is required");
+        return;
     }
 
-    // Copy headers gốc từ browser
-    const headers = { ...req.headers };
-    delete headers.host;
-    delete headers["content-length"];
-    delete headers.connection;
+    const targetReqUrl = targetParams.url;
+    const targetReqHandler = (targetRes) => {
+        res.status(targetRes.statusCode)
 
-    // ✅ Nếu browser gửi X-Auth-Token → đổi thành Cookie
-    if (headers["x-auth-token"]) {
-      headers["cookie"] = `WorkstationJwtPartitioned=${headers["x-auth-token"]}`;
-      delete headers["x-auth-token"];
+        res.setHeaders(new Map(Object.entries(targetRes.headersDistinct)));
+        // set CORS headers
+        res.setHeader('origin', '*');
+        res.setHeader('access-control-allow-origin', '*');
+        res.setHeader('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS');
+        // remove CORP headers
+        res.removeHeader('cross-origin-resource-policy');
+        res.removeHeader('content-security-policy');
+        res.removeHeader('content-security-policy-report-only');
+        res.removeHeader('reporting-endpoints');
+        res.removeHeader('report-to');
+
+        targetRes.on('data', (chunk) => res.write(chunk));
+        targetRes.on('end', () => res.end());
+        targetRes.on('error', (err) => res.destroy(err));
+    };
+    const targetReq = request(targetReqUrl, {method: req.method}, targetReqHandler);
+    targetReq.setHeaders(new Map(Object.entries(req.headersDistinct)
+        .filter(([name]) => !name.startsWith('x-vercel-'))));
+    targetReq.setHeader('host', targetReqUrl.host);
+    if (req.body && req.body?.length > 0) {
+        targetReq.write(req.body);
     }
-
-    // Forward request tới backend
-    const response = await fetch(targetUrl, {
-      method: req.method,
-      headers,
-      body: req.method !== "GET" && req.method !== "HEAD"
-        ? JSON.stringify(req.body)
-        : undefined,
-      agent: httpsAgent
+    targetReq.on('error', (err) => {
+        res.status(500).json({ error: "Proxy error", details: err.message });
     });
-
-    // Forward lại status + headers + body
-    res.status(response.status);
-    response.headers.forEach((value, key) => {
-      res.setHeader(key, value);
-    });
-
-    const buffer = await response.buffer();
-    res.send(buffer);
-
-  } catch (err) {
-    console.error("Proxy error:", err);
-    res.status(500).json({ error: "Proxy error", details: err.message });
-  }
+    targetReq.end();
 });
+
+function request(url, options = {}, callback) {
+    const httpModule = url.protocol === 'https:' ? https : http;
+    return httpModule.request(url, options, callback);
+}
+
+function parseTargetParameters(proxyRequest) {
+    const params = {}
+    // url - treat everything right to url= query parameter as target url value
+    const urlMatch = proxyRequest.url.match(/(?<=[?&])url=(?<url>.*)$/);
+    if (urlMatch) {
+        params.url = new URL(decodeURIComponent(urlMatch.groups.url));
+    }
+
+    return params;
+}
 
 export default app;
