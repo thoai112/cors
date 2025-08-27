@@ -60,19 +60,4 @@ app.all('/', async (req, res) => {
   }
 });
 
-// function request(url, options = {}, callback) {
-//     const httpModule = url.protocol === 'https:' ? https : http;
-//     return httpModule.request(url, options, callback);
-// }
-
-// function parseTargetParameters(proxyRequest) {
-//     const params = {}
-//     // url - treat everything right to url= query parameter as target url value
-//     const urlMatch = proxyRequest.url.match(/(?<=[?&])url=(?<url>.*)$/);
-//     if (urlMatch) {
-//         params.url = new URL(decodeURIComponent(urlMatch.groups.url));
-//     }
-//     return params;
-// }
-
 export default app;
