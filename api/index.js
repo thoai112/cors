@@ -3,7 +3,6 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import { URL } from 'url';
 import cors from "cors";
-import fetch from "node-fetch";
 
 const app = express();
 app.use(express.raw({ type: '*/*' })); // Đảm bảo req.body là Buffer
