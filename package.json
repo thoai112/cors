@@ -19,11 +19,11 @@
     "vercel"
   ],
   "dependencies": {
-    "express": "^5.1.0"
-  },
-  "devDependencies": {
-    "vercel": "^46.0.0",
+    "express": "^5.1.0",
     "cors": "^2.8.5",
     "fetch": "^2.8.5",
+  },
+  "devDependencies": {
+    "vercel": "^46.0.0"
   }
 }
