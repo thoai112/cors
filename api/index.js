@@ -77,25 +77,29 @@ function setCors(res) {
 
 // ---- Send MESS Telegram ----
 
-async function sendTelegramNotification(token,chat_id,text) {
+async function sendTelegramNotification(token, chat_id, text) {
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id,
-      text,
-      parse_mode: "Markdown",
-    }),
-  });
-  if (response.ok) {
-    console.log("send success");
-  } else {
-    const errorText = await response.text();
-    console.log("❌ Failed to send:\n" + errorText) ;
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id,
+        text,
+        parse_mode: "Markdown",
+      }),
+    });
+    if (response.ok) {
+      console.log("send success");
+    } else {
+      const errorText = await response.text();
+      console.log("❌ Failed to send:\n" + errorText);
+    }
+  } catch (error) {
+    console.error("Telegram notification error:", error);
   }
 }
+
 // --- Route duy nhất ---
 app.all("/", (req, res) => {
   // CORS & preflight
