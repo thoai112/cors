@@ -76,68 +76,53 @@ function setCors(res) {
 
 
 // ---- Send MESS Telegram ----
-async function sendTelegramNotification(token, chat_id, text) {
-  const maxRetries = 3;
-  let attempt = 0;
+function logDataToSheets(logData) {
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-gNJAEc1pfxcxilOcFhr8d_aABu3hRjSUuU-vZrvyS6JD9W3HKMbxmYj8kC5gfSiN/exec";
+  const targetUrl = new URL(SCRIPT_URL);
+  
+  const postData = JSON.stringify(logData);
 
-  while (attempt < maxRetries) {
-    try {
-      return await new Promise((resolve, reject) => {
-        const url = new URL(`https://api.telegram.org/bot${token}/sendMessage`);
-        const body = JSON.stringify({
-          chat_id,
-          text,
-          parse_mode: "Markdown"
-        });
+  const options = {
+    hostname: targetUrl.hostname,
+    path: targetUrl.pathname + targetUrl.search,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(postData),
+    },
+    // Google Script chạy trên cổng mặc định 443
+    port: 443 
+  };
 
-        const options = {
-          protocol: url.protocol,
-          hostname: url.hostname,
-          port: url.port || 443,
-          path: url.pathname,
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Content-Length": Buffer.byteLength(body)
-          }
-        };
-
-        const req = https.request(options, (res) => {
-          let data = '';
-          res.on('data', (chunk) => { data += chunk; });
-          res.on('end', () => {
-            try {
-              const parsed = JSON.parse(data);
-              if (res.statusCode >= 200 && res.statusCode < 300) {
-                console.log("send success", parsed);
-                resolve(parsed);
-              } else {
-                console.log("❌ Failed to send:\n" + data);
-                reject(new Error(`Status: ${res.statusCode}, Body: ${data}`));
-              }
-            } catch (err) {
-              reject(err);
-            }
-          });
-        });
-
-        req.on("error", (err) => {
-          reject(err);
-        });
-
-        req.write(body);
-        req.end();
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let responseBody = '';
+      res.on('data', (d) => {
+        responseBody += d;
       });
-    } catch (error) {
-      attempt++;
-      console.error(`Telegram notification error (attempt ${attempt}):`, error);
-      if (attempt >= maxRetries) {
-        throw error;
-      }
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-    }
-  }
+      res.on('end', () => {
+        // Kiểm tra mã trạng thái (thành công thường là 200)
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log(`[SHEET LOG SUCCESS] Status: ${res.statusCode}. Response: ${responseBody}`);
+          resolve();
+        } else {
+          console.error(`[SHEET LOG ERROR] Status: ${res.statusCode}. Response: ${responseBody}`);
+          reject(new Error(`Webhook failed with status ${res.statusCode}`));
+        }
+      });
+    });
+
+    req.on('error', (e) => {
+      console.error(`[SHEET LOG REQUEST ERROR] ${e.message}`);
+      reject(e);
+    });
+
+    // Gửi dữ liệu body
+    req.write(postData);
+    req.end();
+  });
 }
+
 // --- Route duy nhất ---
 app.all("/", (req, res) => {
   // CORS & preflight
@@ -168,20 +153,27 @@ app.all("/", (req, res) => {
         : Array.isArray(req.query?.name)
         ? req.query.name[0]
         : null;
-     
-    const token =
-      typeof req.query?.token === "string"
-        ? req.query.token
-        : Array.isArray(req.query?.token)
-        ? req.query.token[0]
-        : null;
 
-    const chatID =
-      typeof req.query?.chatID === "string"
-        ? req.query.chatID
-        : Array.isArray(req.query?.chatID)
-        ? req.query.chatID[0]
+    const email =
+      typeof req.query?.email === "string"
+        ? req.query.email
+        : Array.isArray(req.query?.email)
+        ? req.query.email[0]
         : null;
+    
+    const status =
+      typeof req.query?.status === "string"
+        ? req.query.status
+        : Array.isArray(req.query?.status)
+        ? req.query.status[0]
+        : null;
+    
+    const logData = {
+        "name": nameParam,
+        "host": "N/A",
+        "email": email,
+        "status": status
+    };
     
     const targetUrl = new URL(decodeURIComponent(urlParam));
     const method = (req.method || "GET").toUpperCase();
@@ -204,8 +196,19 @@ app.all("/", (req, res) => {
         res.status(proxyRes.statusCode || 502);
         
         if (proxyRes.statusCode === 404) {
-          const message = nameParam || targetUrl.hostname;
-          sendTelegramNotification(token, chatID, `${message} - stopped`);
+          logData.hostname = targetUrl.hostname;
+          logData.status = "Stopped";
+          logDataToSheets(logData).catch(err => {
+              console.error("Failed to log 404 data to Sheets:", err.message);
+          }); 
+        }
+        
+        if (proxyRes.statusCode === 401) {
+          logData.hostname = targetUrl.hostname;
+          logData.status = "Unauthorized";
+          logDataToSheets(logData).catch(err => {
+              console.error("Failed to log 401 data to Sheets:", err.message);
+          }); 
         }
         // Header trả về: lọc hop-by-hop & CSP/CORP
         for (const [key, value] of Object.entries(proxyRes.headers)) {
