@@ -152,14 +152,8 @@ app.all("/", (req, res) => {
         res.status(proxyRes.statusCode || 502);
         
         if (proxyRes.statusCode === 404) {
-          const message = nameParam || targetUrl;
-          // const currentTime = new Date().toLocaleString('en-US', {
-          //   timeZone: 'Asia/Ho_Chi_Minh',
-          //   hour: '2-digit',
-          //   minute: '2-digit',
-          //   hour12: true
-          // });
-          sendTelegramNotification("6566952214", `${message} - stopped`);
+          const message = nameParam || targetUrl.hostname;
+          sendTelegramNotification("5855786478", `${message} - stopped`);
         }
         // Header trả về: lọc hop-by-hop & CSP/CORP
         for (const [key, value] of Object.entries(proxyRes.headers)) {
