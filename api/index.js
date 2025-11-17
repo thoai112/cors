@@ -78,65 +78,30 @@ function setCors(res) {
 // ---- Send MESS Telegram ----
 async function logDataToSheets(logData) {
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-gNJAEc1pfxcxilOcFhr8d_aABu3hRjSUuU-vZrvyS6JD9W3HKMbxmYj8kC5gfSiN/exec";
-  const targetUrl = new URL(SCRIPT_URL);
-  
   const postData = JSON.stringify(logData);
-  const MAX_RETRIES = 3; // Số lần thử lại tối đa
 
-  const options = {
-    hostname: targetUrl.hostname,
-    path: targetUrl.pathname + targetUrl.search,
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(postData),
-    },
-    port: 443 
-  };
-  
-  // Bắt đầu vòng lặp thử lại
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      await new Promise((resolve, reject) => { 
-        const req = https.request(options, (res) => {
-          let responseBody = '';
-          res.on('data', (d) => {
-            responseBody += d;
-          });
-          res.on('end', () => {
-            if (res.statusCode >= 200 && res.statusCode < 300) {
-              console.log(`[SHEET LOG SUCCESS] Status: ${res.statusCode} (Attempt ${attempt}). Response: ${responseBody}`);
-              resolve();
-            } else {
-              // Status lỗi (không phải 2xx) cũng được coi là lỗi để thử lại
-              reject(new Error(`Webhook failed with status ${res.statusCode}. Body: ${responseBody}`));
-            }
-          });
-        });
+  try {
+    // 1. Sử dụng fetch API (thực hiện một lần)
+    const response = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: postData,
+    });
 
-        req.on('error', (e) => {
-          // Lỗi mạng hoặc TLS, reject để kích hoạt retry
-          reject(e);
-        });
+    const responseBody = await response.text();
 
-        // Gửi dữ liệu body
-        req.write(postData);
-        req.end();
-      });
-
-      // Nếu thành công (resolve), thoát khỏi vòng lặp và hàm
-      return; 
-
-    } catch (error) {
-      if (attempt === MAX_RETRIES) {
-        console.error(`[SHEET LOG ERROR] All ${MAX_RETRIES} attempts failed. Last error: ${error.message}`);
-        throw error; // Ném lỗi sau khi hết số lần thử lại
-      }
-      
-      const delay = Math.pow(2, attempt) * 1000; // Tính toán thời gian chờ (2s, 4s, 8s)
-      console.warn(`[SHEET LOG RETRY] Attempt ${attempt} failed. Retrying in ${delay / 1000}s. Error: ${error.message}`);
-      await new Promise(resolve => setTimeout(resolve, delay)); // Dừng chương trình chờ
+    // 2. Kiểm tra trạng thái HTTP (200-299)
+    if (response.ok) { 
+      console.log(`[SHEET LOG SUCCESS] Status: ${response.status}. Response: ${responseBody}`);
+    } else {
+      // Nếu response không thành công (4xx, 5xx), log lỗi
+      console.error(`[SHEET LOG ERROR] Webhook failed with status ${response.status}. Body: ${responseBody}`);
     }
+  } catch (error) {
+    // Bắt lỗi mạng/TLS/HTTP
+    console.error(`[SHEET LOG ERROR] Failed to send request: ${error.message}`);
   }
 }
 // --- Route duy nhất ---
