@@ -76,30 +76,68 @@ function setCors(res) {
 
 
 // ---- Send MESS Telegram ----
-
 async function sendTelegramNotification(token, chat_id, text) {
-  const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id,
-        text,
-        parse_mode: "Markdown",
-      }),
-    });
-    if (response.ok) {
-      console.log("send success");
-    } else {
-      const errorText = await response.text();
-      console.log("❌ Failed to send:\n" + errorText);
+  const maxRetries = 3;
+  let attempt = 0;
+
+  while (attempt < maxRetries) {
+    try {
+      return await new Promise((resolve, reject) => {
+        const url = new URL(`https://api.telegram.org/bot${token}/sendMessage`);
+        const body = JSON.stringify({
+          chat_id,
+          text,
+          parse_mode: "Markdown"
+        });
+
+        const options = {
+          protocol: url.protocol,
+          hostname: url.hostname,
+          port: url.port || 443,
+          path: url.pathname,
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Length": Buffer.byteLength(body)
+          }
+        };
+
+        const req = https.request(options, (res) => {
+          let data = '';
+          res.on('data', (chunk) => { data += chunk; });
+          res.on('end', () => {
+            try {
+              const parsed = JSON.parse(data);
+              if (res.statusCode >= 200 && res.statusCode < 300) {
+                console.log("send success", parsed);
+                resolve(parsed);
+              } else {
+                console.log("❌ Failed to send:\n" + data);
+                reject(new Error(`Status: ${res.statusCode}, Body: ${data}`));
+              }
+            } catch (err) {
+              reject(err);
+            }
+          });
+        });
+
+        req.on("error", (err) => {
+          reject(err);
+        });
+
+        req.write(body);
+        req.end();
+      });
+    } catch (error) {
+      attempt++;
+      console.error(`Telegram notification error (attempt ${attempt}):`, error);
+      if (attempt >= maxRetries) {
+        throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
     }
-  } catch (error) {
-    console.error("Telegram notification error:", error);
   }
 }
-
 // --- Route duy nhất ---
 app.all("/", (req, res) => {
   // CORS & preflight
