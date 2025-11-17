@@ -76,11 +76,12 @@ function setCors(res) {
 
 
 // ---- Send MESS Telegram ----
-function logDataToSheets(logData) {
+async function logDataToSheets(logData) {
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx-gNJAEc1pfxcxilOcFhr8d_aABu3hRjSUuU-vZrvyS6JD9W3HKMbxmYj8kC5gfSiN/exec";
   const targetUrl = new URL(SCRIPT_URL);
   
   const postData = JSON.stringify(logData);
+  const MAX_RETRIES = 3; // Số lần thử lại tối đa
 
   const options = {
     hostname: targetUrl.hostname,
@@ -90,39 +91,54 @@ function logDataToSheets(logData) {
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(postData),
     },
-    // Google Script chạy trên cổng mặc định 443
     port: 443 
   };
+  
+  // Bắt đầu vòng lặp thử lại
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      await new Promise((resolve, reject) => { 
+        const req = https.request(options, (res) => {
+          let responseBody = '';
+          res.on('data', (d) => {
+            responseBody += d;
+          });
+          res.on('end', () => {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              console.log(`[SHEET LOG SUCCESS] Status: ${res.statusCode} (Attempt ${attempt}). Response: ${responseBody}`);
+              resolve();
+            } else {
+              // Status lỗi (không phải 2xx) cũng được coi là lỗi để thử lại
+              reject(new Error(`Webhook failed with status ${res.statusCode}. Body: ${responseBody}`));
+            }
+          });
+        });
 
-  return new Promise((resolve, reject) => {
-    const req = https.request(options, (res) => {
-      let responseBody = '';
-      res.on('data', (d) => {
-        responseBody += d;
+        req.on('error', (e) => {
+          // Lỗi mạng hoặc TLS, reject để kích hoạt retry
+          reject(e);
+        });
+
+        // Gửi dữ liệu body
+        req.write(postData);
+        req.end();
       });
-      res.on('end', () => {
-        // Kiểm tra mã trạng thái (thành công thường là 200)
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          console.log(`[SHEET LOG SUCCESS] Status: ${res.statusCode}. Response: ${responseBody}`);
-          resolve();
-        } else {
-          console.error(`[SHEET LOG ERROR] Status: ${res.statusCode}. Response: ${responseBody}`);
-          reject(new Error(`Webhook failed with status ${res.statusCode}`));
-        }
-      });
-    });
 
-    req.on('error', (e) => {
-      console.error(`[SHEET LOG REQUEST ERROR] ${e.message}`);
-      reject(e);
-    });
+      // Nếu thành công (resolve), thoát khỏi vòng lặp và hàm
+      return; 
 
-    // Gửi dữ liệu body
-    req.write(postData);
-    req.end();
-  });
+    } catch (error) {
+      if (attempt === MAX_RETRIES) {
+        console.error(`[SHEET LOG ERROR] All ${MAX_RETRIES} attempts failed. Last error: ${error.message}`);
+        throw error; // Ném lỗi sau khi hết số lần thử lại
+      }
+      
+      const delay = Math.pow(2, attempt) * 1000; // Tính toán thời gian chờ (2s, 4s, 8s)
+      console.warn(`[SHEET LOG RETRY] Attempt ${attempt} failed. Retrying in ${delay / 1000}s. Error: ${error.message}`);
+      await new Promise(resolve => setTimeout(resolve, delay)); // Dừng chương trình chờ
+    }
+  }
 }
-
 // --- Route duy nhất ---
 app.all("/", (req, res) => {
   // CORS & preflight
