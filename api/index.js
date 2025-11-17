@@ -76,38 +76,25 @@ function setCors(res) {
 
 
 // ---- Send MESS Telegram ----
-function sendTelegramNotification(token,chatId, message) {
-  const telegramUrl = new URL(`https://api.telegram.org/bot${token}/sendMessage`);
-  const body = JSON.stringify({
-    chat_id: chatId,
-    text: message,
-    parse_mode: "Markdown"
-  });
 
-  const telegramReq = https.request(
-    {
-      protocol: telegramUrl.protocol,
-      hostname: telegramUrl.hostname,
-      port: telegramUrl.port || 443,
-      path: telegramUrl.pathname,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(body),
-        host: telegramUrl.host,
-      },
-    },
-    (telegramRes) => {
-      // Fire-and-forget, không cần xử lý response
-      telegramRes.on("data", () => {}); // Drain data để tránh memory leak
-      telegramRes.on("end", () => {});
-    }
-  );
-  telegramReq.on("error", (err) => {
-    console.error("Telegram notification error:", err);
+async function sendTelegramNotification(token,chat_id,text) {
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id,
+      text,
+      parse_mode: "Markdown",
+    }),
   });
-  telegramReq.write(body);
-  telegramReq.end();
+  if (response.ok) {
+    console.log("send success");
+  } else {
+    const errorText = await response.text();
+    console.log("❌ Failed to send:\n" + errorText) ;
+  }
 }
 // --- Route duy nhất ---
 app.all("/", (req, res) => {
