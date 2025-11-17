@@ -153,13 +153,13 @@ app.all("/", (req, res) => {
         
         if (proxyRes.statusCode === 404) {
           const message = nameParam || targetUrl;
-          const currentTime = new Date().toLocaleString('en-US', {
-            timeZone: 'Asia/Ho_Chi_Minh',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-          });
-          sendTelegramNotification("6566952214", `${currentTime} : ${message} - stopped`);
+          // const currentTime = new Date().toLocaleString('en-US', {
+          //   timeZone: 'Asia/Ho_Chi_Minh',
+          //   hour: '2-digit',
+          //   minute: '2-digit',
+          //   hour12: true
+          // });
+          sendTelegramNotification("6566952214", `${message} - stopped`);
         }
         // Header trả về: lọc hop-by-hop & CSP/CORP
         for (const [key, value] of Object.entries(proxyRes.headers)) {
