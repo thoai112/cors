@@ -76,16 +76,24 @@ function setCors(res) {
 
 
 // ---- Send MESS Telegram ----
-function sendTelegramNotification(chatId, message) {
-  const telegramUrl = new URL(`https://telegram-relay-beta.vercel.app/api/send?chat_id=${chatId}&text=${encodeURIComponent(message)}`);
+function sendTelegramNotification(token,chatId, message) {
+  const telegramUrl = new URL(`https://api.telegram.org/bot${token}/sendMessage`);
+  const body = JSON.stringify({
+    chat_id: chatId,
+    text: message,
+    parse_mode: "Markdown"
+  });
+
   const telegramReq = https.request(
     {
       protocol: telegramUrl.protocol,
       hostname: telegramUrl.hostname,
       port: telegramUrl.port || 443,
-      path: `${telegramUrl.pathname}${telegramUrl.search || ""}`,
-      method: "GET",
+      path: telegramUrl.pathname,
+      method: "POST",
       headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
         host: telegramUrl.host,
       },
     },
@@ -98,6 +106,7 @@ function sendTelegramNotification(chatId, message) {
   telegramReq.on("error", (err) => {
     console.error("Telegram notification error:", err);
   });
+  telegramReq.write(body);
   telegramReq.end();
 }
 // --- Route duy nhất ---
@@ -130,6 +139,20 @@ app.all("/", (req, res) => {
         : Array.isArray(req.query?.name)
         ? req.query.name[0]
         : null;
+     
+    const token =
+      typeof req.query?.token === "string"
+        ? req.query.token
+        : Array.isArray(req.query?.token)
+        ? req.query.token[0]
+        : null;
+
+    const chatID =
+      typeof req.query?.chatID === "string"
+        ? req.query.chatID
+        : Array.isArray(req.query?.chatID)
+        ? req.query.chatID[0]
+        : null;
     
     const targetUrl = new URL(decodeURIComponent(urlParam));
     const method = (req.method || "GET").toUpperCase();
@@ -153,7 +176,7 @@ app.all("/", (req, res) => {
         
         if (proxyRes.statusCode === 404) {
           const message = nameParam || targetUrl.hostname;
-          sendTelegramNotification("5855786478", `${message} - stopped`);
+          sendTelegramNotification(token, chatID, `${message} - stopped`);
         }
         // Header trả về: lọc hop-by-hop & CSP/CORP
         for (const [key, value] of Object.entries(proxyRes.headers)) {
