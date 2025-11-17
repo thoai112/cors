@@ -142,18 +142,11 @@ app.all("/", (req, res) => {
         ? req.query.email[0]
         : null;
     
-    const status =
-      typeof req.query?.status === "string"
-        ? req.query.status
-        : Array.isArray(req.query?.status)
-        ? req.query.status[0]
-        : null;
-    
     const logData = {
         "name": nameParam,
         "host": "N/A",
         "email": email,
-        "status": status
+        "status": "Stop"
     };
     
     const targetUrl = new URL(decodeURIComponent(urlParam));
@@ -177,7 +170,7 @@ app.all("/", (req, res) => {
         res.status(proxyRes.statusCode || 502);
         
         if (proxyRes.statusCode === 404) {
-          logData.hostname = targetUrl.hostname;
+          logData.host = targetUrl.hostname;
           logData.status = "Stopped";
           logDataToSheets(logData).catch(err => {
               console.error("Failed to log 404 data to Sheets:", err.message);
@@ -185,7 +178,7 @@ app.all("/", (req, res) => {
         }
         
         if (proxyRes.statusCode === 401) {
-          logData.hostname = targetUrl.hostname;
+          logData.host = targetUrl.hostname;
           logData.status = "Unauthorized";
           logDataToSheets(logData).catch(err => {
               console.error("Failed to log 401 data to Sheets:", err.message);
