@@ -124,11 +124,18 @@ app.all("/", (req, res) => {
       return;
     }
 
+    const nameParam =
+      typeof req.query?.name === "string"
+        ? req.query.name
+        : Array.isArray(req.query?.name)
+        ? req.query.name[0]
+        : null;
+    
     const targetUrl = new URL(decodeURIComponent(urlParam));
     const method = (req.method || "GET").toUpperCase();
     const isBodyAllowed = method !== "GET" && method !== "HEAD";
     const outgoingHeaders = buildOutgoingHeaders(req, targetUrl);
-
+  
     // Tạo request đến đích (giữ Host & stream thân nhị phân)
     const httpModule = pickHttpModule(targetUrl);
     const proxyReq = httpModule.request(
@@ -145,7 +152,8 @@ app.all("/", (req, res) => {
         res.status(proxyRes.statusCode || 502);
         
         if (proxyRes.statusCode === 404) {
-          sendTelegramNotification("6566952214", `${targetUrl} - stopped`);
+          const message = nameParam || targetUrl;
+          sendTelegramNotification("6566952214", `${message} - stopped`);
         }
         // Header trả về: lọc hop-by-hop & CSP/CORP
         for (const [key, value] of Object.entries(proxyRes.headers)) {
