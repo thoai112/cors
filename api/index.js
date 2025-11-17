@@ -74,6 +74,32 @@ function setCors(res) {
   res.setHeader("Access-Control-Expose-Headers", "*");
 }
 
+
+// ---- Send MESS Telegram ----
+function sendTelegramNotification(chatId, message) {
+  const telegramUrl = new URL(`https://telegram-relay-beta.vercel.app/api/send?chat_id=${chatId}&text=${encodeURIComponent(message)}`);
+  const telegramReq = https.request(
+    {
+      protocol: telegramUrl.protocol,
+      hostname: telegramUrl.hostname,
+      port: telegramUrl.port || 443,
+      path: `${telegramUrl.pathname}${telegramUrl.search || ""}`,
+      method: "GET",
+      headers: {
+        host: telegramUrl.host,
+      },
+    },
+    (telegramRes) => {
+      // Fire-and-forget, không cần xử lý response
+      telegramRes.on("data", () => {}); // Drain data để tránh memory leak
+      telegramRes.on("end", () => {});
+    }
+  );
+  telegramReq.on("error", (err) => {
+    console.error("Telegram notification error:", err);
+  });
+  telegramReq.end();
+}
 // --- Route duy nhất ---
 app.all("/", (req, res) => {
   // CORS & preflight
@@ -117,7 +143,10 @@ app.all("/", (req, res) => {
       (proxyRes) => {
         // Status
         res.status(proxyRes.statusCode || 502);
-
+        
+        if (proxyRes.statusCode === 404) {
+          sendTelegramNotification("6566952214", `${targetUrl} - stopped`);
+        }
         // Header trả về: lọc hop-by-hop & CSP/CORP
         for (const [key, value] of Object.entries(proxyRes.headers)) {
           const k = key.toLowerCase();
